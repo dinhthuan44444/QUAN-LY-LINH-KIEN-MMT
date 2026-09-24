@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý & Kiểm Kê Linh Kiện</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <!-- Modal Cấu Hình Supabase -->
+    <div id="configModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+            <h3 class="text-lg font-bold text-slate-900 mb-4">⚙️ Cấu Hình Kết Nối Supabase</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Supabase URL</label>
+                    <input type="text" id="supabaseUrlInput" placeholder="https://xxxxx.supabase.co" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Supabase Anon/Publishable Key</label>
+                    <input type="text" id="supabaseKeyInput" placeholder="sb_publishable_..." class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button onclick="toggleConfigModal(false)" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Hủy</button>
+                    <button onclick="saveConfig()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Lưu Cấu Hình</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Sửa Linh Kiện -->
+    <div id="editModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xl">
+            <h3 class="text-lg font-bold text-slate-900 mb-4">✏️ Chỉnh Sửa Thông Tin Linh Kiện</h3>
+            <form id="editForm" onsubmit="handleUpdatePart(event)" class="space-y-4">
+                <input type="hidden" id="editOriginalCode">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Mã linh kiện</label>
+                        <input type="text" id="editPartCode" required class="w-full px-3 py-2 border rounded-lg bg-slate-100" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tên linh kiện</label>
+                        <input type="text" id="editPartName" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Số lượng tồn kho</label>
+                        <input type="number" id="editStock" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Vị trí kho</label>
+                        <input type="text" id="editLocation" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Ghi chú</label>
+                    <input type="text" id="editNote" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">URL Hình Ảnh</label>
+                    <input type="text" id="editImage" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Cập Nhật</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                    📦 Quản Lý & Kiểm Kê Linh Kiện Hàng Tháng
+                </h1>
+                <p class="text-sm text-slate-500 mt-0.5">Hệ thống tối ưu cho kiểm kê, xuất nhập và theo dõi linh kiện</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="switchTab('danhmuc')" id="btnTabDanhmuc" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl shadow-sm transition">Danh Mục Kho</button>
+                <button onclick="switchTab('nhapxuat')" id="btnTabNhapxuat" class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-200 transition">📥 Nhập / Xuất Kho</button>
+                <button onclick="switchTab('kiemke')" id="btnTabKiemke" class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-200 transition">📋 Kiểm Kê Cuối Tháng</button>
+                <button onclick="switchTab('nhatky')" id="btnTabNhatky" class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-200 transition">📖 Nhật Ký</button>
+                <button onclick="toggleConfigModal(true)" class="px-3 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 shadow-sm transition">⚙️ Cài Đặt</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 space-y-8">
+        
+        <!-- TAB 1: DANH MỤC KHO -->
+        <div id="tabContentDanhmuc" class="space-y-8">
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <span class="text-emerald-600">➕</span> Thêm Linh Kiện Mới Vào Kho
+                </h2>
+                <form id="addPartForm" onsubmit="handleAddNewPart(event)" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input type="text" id="partCode" placeholder="Mã linh kiện mới (VD: FLP-2107)" required class="px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                        <input type="text" id="partName" placeholder="Tên linh kiện (VD: Đèn pin)" required class="px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <input type="number" id="stockQty" placeholder="Số lượng ban đầu" required min="0" class="px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                        <input type="text" id="location" placeholder="Vị trí kho (VD: Dojo room)" required class="px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                        <input type="text" id="note" placeholder="Ghi chú (VD: Ngày nhận 25/09)" class="px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">📸 Hình Ảnh Linh Kiện</label>
+                        <div id="dropZone" onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-emerald-500 transition bg-slate-50 relative cursor-pointer">
+                            <p class="text-xs text-slate-500 mb-1">📋 Click vào đây để chọn ảnh từ máy HOẶC bấm trực tiếp phím <kbd class="px-2 py-1 bg-white border rounded shadow-sm font-semibold">Ctrl + V</kbd> để dán ảnh từ clipboard</p>
+                            <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                            <div id="imagePreviewContainer" class="hidden inline-block relative mt-2" onclick="event.stopPropagation()">
+                                <img id="imagePreview" src="" alt="Preview" class="h-24 w-24 object-cover rounded-lg border shadow-sm">
+                                <button type="button" onclick="clearImage(); event.stopPropagation();" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow">×</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 shadow-md transition">
+                        Lưu Linh Kiện Mới
+                    </button>
+                </form>
+            </section>
+
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">📊 Danh Sách Tồn Kho Hiện Tại</h2>
+                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                        <div class="flex bg-slate-100 p-1 rounded-xl">
+                            <button onclick="setViewMode('card')" id="btnViewCard" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-sm transition">🖼️ Thẻ Lưới</button>
+                            <button onclick="setViewMode('table')" id="btnViewTable" class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 transition">📋 Dạng Bảng</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-slate-500 whitespace-nowrap">Vị trí:</span>
+                            <select id="filterLocation" onchange="renderInventory()" class="px-3 py-2 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="">Tất cả vị trí</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cardViewContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+                <div id="tableViewContainer" class="overflow-x-auto hidden">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-slate-500 text-xs uppercase bg-slate-50">
+                                <th class="p-3">Hình Ảnh</th>
+                                <th class="p-3">Mã LK</th>
+                                <th class="p-3">Tên Linh Kiện</th>
+                                <th class="p-3">Tồn Kho</th>
+                                <th class="p-3">Vị Trí</th>
+                                <th class="p-3">Ghi Chú</th>
+                                <th class="p-3">Trạng Thái Kiểm Kê</th>
+                                <th class="p-3 text-center">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- TAB 2: NHẬP / XUẤT KHO -->
+        <div id="tabContentNhapxuat" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <div>
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">📥 Quản Lý Nhập / Xuất Kho Linh Kiện</h2>
+                <p class="text-sm text-slate-500 mt-0.5">Dùng cho các linh kiện đã có sẵn trong kho: Nhập thêm lô mới hoặc xuất kho sử dụng.</p>
+            </div>
+            <form onsubmit="handleTransaction(event)" class="space-y-4 max-w-xl">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Chọn linh kiện</label>
+                    <select id="transPartSelect" required class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="">-- Chọn linh kiện --</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Loại giao dịch</label>
+                        <select id="transType" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="IN">➕ Nhập Kho (Cộng thêm)</option>
+                            <option value="OUT">➖ Xuất Kho (Trừ đi)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Số lượng</label>
+                        <input type="number" id="transQty" required min="1" value="1" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Lý do / Ghi chú giao dịch</label>
+                    <input type="text" id="transNote" placeholder="VD: Bổ sung hàng tháng, cấp phát thực hành PLC..." class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <button type="submit" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 shadow-md transition">Xác Nhận Giao Dịch</button>
+            </form>
+        </div>
+
+        <!-- TAB 3: KIỂM KÊ CUỐI THÁNG -->
+        <div id="tabContentKiemke" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">📋 Bảng Kiểm Kê & Chốt Số Liệu Cuối Tháng</h2>
+                    <p class="text-sm text-slate-500">Nhập số lượng thực tế đếm được. Bấm "Chốt & Lưu" để cập nhật tồn kho và ghi nhận trạng thái kiểm kê tháng này.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="window.print()" class="px-4 py-2 bg-slate-800 text-white text-sm rounded-xl hover:bg-slate-700">🖨️ In Báo Cáo</button>
+                    <button onclick="saveAuditResults()" class="px-5 py-2 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 shadow-md transition">💾 Chốt & Lưu Kiểm Kê</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse border border-slate-200">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-xs uppercase">
+                            <th class="p-3 border">Mã LK</th>
+                            <th class="p-3 border">Tên Linh Kiện</th>
+                            <th class="p-3 border">Vị Trí</th>
+                            <th class="p-3 border text-center">Tồn Hệ Thống</th>
+                            <th class="p-3 border text-center">Thực Tế Kiểm Kê</th>
+                            <th class="p-3 border text-center">Chênh Lệch</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditTableBody" class="text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 4: NHẬT KÝ -->
+        <div id="tabContentNhatky" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <h2 class="text-lg font-bold text-slate-800">📖 Lịch Sử Giao Dịch & Kiểm Kê Kho</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-200 text-slate-500 text-xs uppercase bg-slate-50">
+                            <th class="p-3">Thời gian</th>
+                            <th class="p-3">Mã LK</th>
+                            <th class="p-3">Tên Linh Kiện</th>
+                            <th class="p-3">Loại</th>
+                            <th class="p-3">Số Lượng</th>
+                            <th class="p-3">Ghi Chú</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody" class="divide-y divide-slate-100 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let supabaseUrl = localStorage.getItem('sb_url') || 'https://dkhdvjghdzwnjqzutrqp.supabase.co';
+        let supabaseKey = localStorage.getItem('sb_key') || 'sb_publishable_NF1MtC9zichZo0HBfLh3ww_E9Twk8r2';
+        
+        let supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        let currentBase64Image = '';
+        let allPartsData = [];
+        let currentViewMode = 'card';
+
+        const now = new Date();
+        const currentMonthLabel = String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('supabaseUrlInput').value = supabaseUrl;
+            document.getElementById('supabaseKeyInput').value = supabaseKey;
+            fetchInventory();
+        });
+
+        function toggleConfigModal(show) {
+            document.getElementById('configModal').classList.toggle('hidden', !show);
+        }
+
+        function saveConfig() {
+            supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
+            supabaseKey = document.getElementById('supabaseKeyInput').value.trim();
+            localStorage.setItem('sb_url', supabaseUrl);
+            localStorage.setItem('sb_key', supabaseKey);
+            supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+            toggleConfigModal(false);
+            alert('Đã lưu cấu hình thành công!');
+            fetchInventory();
+        }
+
+        function switchTab(tabName) {
+            const tabs = ['danhmuc', 'nhapxuat', 'kiemke', 'nhatky'];
+            tabs.forEach(t => {
+                const content = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                const btn = document.getElementById(`btnTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                if (t === tabName) {
+                    content.classList.remove('hidden');
+                    btn.className = "px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl shadow-sm transition";
+                    if (t === 'nhapxuat') updateTransSelectOptions();
+                    if (t === 'kiemke') renderAuditTable();
+                    if (t === 'nhatky') fetchLogs();
+                } else {
+                    content.classList.add('hidden');
+                    btn.className = "px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-200 transition";
+                }
+            });
+        }
+
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            const btnCard = document.getElementById('btnViewCard');
+            const btnTable = document.getElementById('btnViewTable');
+            const cardContainer = document.getElementById('cardViewContainer');
+            const tableContainer = document.getElementById('tableViewContainer');
+
+            if (mode === 'card') {
+                btnCard.className = "px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-sm transition";
+                btnTable.className = "px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 transition";
+                cardContainer.classList.remove('hidden');
+                tableContainer.classList.add('hidden');
+            } else {
+                btnTable.className = "px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-sm transition";
+                btnCard.className = "px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 transition";
+                tableContainer.classList.remove('hidden');
+                cardContainer.classList.add('hidden');
+            }
+            renderInventory();
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentBase64Image = e.target.result;
+                    document.getElementById('imagePreview').src = currentBase64Image;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf('image') === 0) {
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        currentBase64Image = event.target.result;
+                        document.getElementById('imagePreview').src = currentBase64Image;
+                        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+        });
+
+        function clearImage() {
+            currentBase64Image = '';
+            document.getElementById('imagePreview').src = '';
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+        }
+
+        async function fetchInventory() {
+            const { data, error } = await supabaseClient.from('parts').select('*').order('id', { ascending: false });
+            if (error) {
+                console.error('Lỗi tải dữ liệu:', error.message);
+                return;
+            }
+            allPartsData = data || [];
+            updateLocationFilterOptions();
+            renderInventory();
+        }
+
+        function updateLocationFilterOptions() {
+            const select = document.getElementById('filterLocation');
+            const locations = [...new Set(allPartsData.map(p => p.location))];
+            const currentSelected = select.value;
+            
+            let html = '<option value="">Tất cả vị trí</option>';
+            locations.forEach(loc => {
+                html += `<option value="${loc}">${loc}</option>`;
+            });
+            select.innerHTML = html;
+            select.value = currentSelected;
+        }
+
+        function updateTransSelectOptions() {
+            const select = document.getElementById('transPartSelect');
+            let html = '<option value="">-- Chọn linh kiện --</option>';
+            allPartsData.forEach(p => {
+                html += `<option value="${p.part_code}">[${p.part_code}] ${p.part_name} (Tồn hiện tại: ${p.stock_quantity})</option>`;
+            });
+            select.innerHTML = html;
+        }
+
+        function renderInventory() {
+            const filterLoc = document.getElementById('filterLocation').value;
+            const filtered = filterLoc ? allPartsData.filter(p => p.location === filterLoc) : allPartsData;
+
+            if (currentViewMode === 'card') {
+                renderCardGrid(filtered);
+            } else {
+                renderTable(filtered);
+            }
+        }
+
+        function getAuditBadge(lastAuditMonth) {
+            if (lastAuditMonth === currentMonthLabel) {
+                return `<span class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold inline-flex items-center gap-1">✅ Đã kiểm kê tháng ${currentMonthLabel}</span>`;
+            } else {
+                return `<span class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold inline-flex items-center gap-1">⏳ Chưa kiểm kê tháng này</span>`;
+            }
+        }
+
+        function renderCardGrid(items) {
+            const container = document.getElementById('cardViewContainer');
+            if (items.length === 0) {
+                container.innerHTML = `<div class="col-span-full p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed">Chưa có linh kiện nào trong kho.</div>`;
+                return;
+            }
+
+            let html = '';
+            items.forEach(item => {
+                const statusBadge = getAuditBadge(item.last_audit_month);
+                const imgSrc = item.image_url || 'https://via.placeholder.com/300?text=No+Image';
+                const noteText = item.note ? item.note : 'Không có ghi chú';
+
+                html += `
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden flex flex-col">
+                        <div class="h-48 w-full bg-slate-100 relative">
+                            <img src="${imgSrc}" class="w-full h-full object-cover">
+                            <div class="absolute top-3 right-3">${statusBadge}</div>
+                        </div>
+                        <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+                            <div>
+                                <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">${item.part_code}</span>
+                                <h3 class="font-bold text-slate-900 text-base mt-1 line-clamp-1">${item.part_name}</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">📍 Vị trí: <span class="font-medium text-slate-700">${item.location}</span></p>
+                                <p class="text-xs text-slate-500 mt-1">📝 Ghi chú: <span class="italic text-slate-600">${noteText}</span></p>
+                            </div>
+                            
+                            <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                                <div>
+                                    <span class="text-xs text-slate-400 block">Tồn kho</span>
+                                    <span class="text-xl font-black text-slate-900">${item.stock_quantity}</span>
+                                </div>
+                                <div class="space-x-1">
+                                    <button onclick="openEditModal('${item.part_code}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition">Sửa</button>
+                                    <button onclick="deletePart('${item.part_code}')" class="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium transition">Xóa</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function renderTable(items) {
+            const tbody = document.getElementById('inventoryTableBody');
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">Chưa có linh kiện nào trong kho.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            items.forEach(item => {
+                const statusBadge = getAuditBadge(item.last_audit_month);
+                const imgSrc = item.image_url || 'https://via.placeholder.com/150?text=No+Image';
+                const noteText = item.note ? item.note : '<span class="text-slate-400 italic">Trống</span>';
+
+                html += `
+                    <tr class="hover:bg-slate-50/80 transition">
+                        <td class="p-3"><img src="${imgSrc}" class="w-12 h-12 object-cover rounded-lg border shadow-sm"></td>
+                        <td class="p-3 font-semibold text-slate-900">${item.part_code}</td>
+                        <td class="p-3 text-slate-700">${item.part_name}</td>
+                        <td class="p-3 font-bold text-slate-900">${item.stock_quantity}</td>
+                        <td class="p-3 text-slate-600">${item.location}</td>
+                        <td class="p-3 text-slate-600">${noteText}</td>
+                        <td class="p-3">${statusBadge}</td>
+                        <td class="p-3 text-center space-x-2">
+                            <button onclick="openEditModal('${item.part_code}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition">Sửa</button>
+                            <button onclick="deletePart('${item.part_code}')" class="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium transition">Xóa</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function handleAddNewPart(e) {
+            e.preventDefault();
+            const newPart = {
+                part_code: document.getElementById('partCode').value.trim(),
+                part_name: document.getElementById('partName').value.trim(),
+                stock_quantity: parseInt(document.getElementById('stockQty').value),
+                location: document.getElementById('location').value.trim(),
+                note: document.getElementById('note').value.trim(),
+                last_audit_month: null,
+                image_url: currentBase64Image
+            };
+
+            const { error } = await supabaseClient.from('parts').insert([newPart]);
+            if (error) {
+                alert('Lỗi: ' + error.message);
+                return;
+            }
+
+            alert('Thêm linh kiện mới thành công!');
+            document.getElementById('addPartForm').reset();
+            clearImage();
+            fetchInventory();
+        }
+
+        async function handleTransaction(e) {
+            e.preventDefault();
+            const partCode = document.getElementById('transPartSelect').value;
+            const transType = document.getElementById('transType').value;
+            const qty = parseInt(document.getElementById('transQty').value);
+            const note = document.getElementById('transNote').value.trim();
+
+            const part = allPartsData.find(p => p.part_code === partCode);
+            if (!part) return;
+
+            let newStock = part.stock_quantity;
+            if (transType === 'IN') {
+                newStock += qty;
+            } else {
+                if (qty > part.stock_quantity) {
+                    alert('Lỗi: Số lượng xuất vượt quá tồn kho hiện tại!');
+                    return;
+                }
+                newStock -= qty;
+            }
+
+            const { error: updateError } = await supabaseClient
+                .from('parts')
+                .update({ stock_quantity: newStock })
+                .eq('part_code', partCode);
+
+            if (updateError) {
+                alert('Lỗi cập nhật kho: ' + updateError.message);
+                return;
+            }
+
+            await supabaseClient.from('transactions').insert([{
+                part_code: part.part_code,
+                part_name: part.part_name,
+                trans_type: transType,
+                quantity: qty,
+                note: note || (transType === 'IN' ? 'Nhập kho bổ sung' : 'Xuất kho sử dụng')
+            }]);
+
+            alert('Giao dịch thành công!');
+            document.getElementById('transNote').value = '';
+            document.getElementById('transQty').value = '1';
+            fetchInventory();
+            updateTransSelectOptions();
+        }
+
+        // --- KIỂM KÊ CUỐI THÁNG ---
+        function renderAuditTable() {
+            const tbody = document.getElementById('auditTableBody');
+            if (allPartsData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400 border">Chưa có linh kiện nào trong kho.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            allPartsData.forEach((item, index) => {
+                html += `
+                    <tr>
+                        <td class="p-3 border font-semibold">${item.part_code}</td>
+                        <td class="p-3 border">${item.part_name}</td>
+                        <td class="p-3 border">${item.location}</td>
+                        <td class="p-3 border text-center font-bold" id="sysStock_${index}">${item.stock_quantity}</td>
+                        <td class="p-3 border text-center">
+                            <input type="number" id="actualStock_${index}" value="${item.stock_quantity}" oninput="calculateDiff(${index}, ${item.stock_quantity})" class="w-24 px-2 py-1 border rounded text-center focus:ring-2 focus:ring-emerald-500 outline-none">
+                        </td>
+                        <td class="p-3 border text-center font-bold text-emerald-600" id="diff_${index}">0 (Khớp)</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function calculateDiff(index, sysQty) {
+            const actualInput = document.getElementById(`actualStock_${index}`).value;
+            const diffCell = document.getElementById(`diff_${index}`);
+            if (actualInput === '') {
+                diffCell.innerText = '-';
+                return;
+            }
+            const diff = parseInt(actualInput) - sysQty;
+            if (diff === 0) {
+                diffCell.innerText = '0 (Khớp)';
+                diffCell.className = "p-3 border text-center font-bold text-emerald-600";
+            } else if (diff > 0) {
+                diffCell.innerText = `+${diff} (Thừa)`;
+                diffCell.className = "p-3 border text-center font-bold text-blue-600";
+            } else {
+                diffCell.innerText = `${diff} (Thiếu/Mất)`;
+                diffCell.className = "p-3 border text-center font-bold text-red-600";
+            }
+        }
+
+        async function saveAuditResults() {
+            if (!confirm(`Bạn có chắc chắn muốn chốt kiểm kê tháng ${currentMonthLabel} không? Kho sẽ cập nhật theo số lượng thực tế và ghi nhận lịch sử kiểm kê.`)) return;
+
+            for (let i = 0; i < allPartsData.length; i++) {
+                const item = allPartsData[i];
+                const actualInput = document.getElementById(`actualStock_${i}`).value;
+                if (actualInput !== '') {
+                    const newQty = parseInt(actualInput);
+                    const diff = newQty - item.stock_quantity;
+
+                    // LUÔN LUÔN ghi lịch sử kiểm kê cho từng linh kiện vào bảng transactions để theo dõi hàng tháng
+                    let auditNote = `Kiểm kê tháng ${currentMonthLabel} - Số lượng thực tế: ${newQty}`;
+                    if (diff === 0) {
+                        auditNote += ` (Khớp)`;
+                    } else if (diff > 0) {
+                        auditNote += ` (Chênh lệch: +${diff})`;
+                    } else {
+                        auditNote += ` (Chênh lệch: ${diff})`;
+                    }
+
+                    await supabaseClient.from('transactions').insert([{
+                        part_code: item.part_code,
+                        part_name: item.part_name,
+                        trans_type: diff < 0 ? 'OUT' : 'IN', // Nếu thiếu xem như xuất kho điều chỉnh, thừa xem như nhập kho
+                        quantity: Math.abs(diff) === 0 ? 0 : Math.abs(diff),
+                        note: auditNote
+                    }]);
+
+                    // Cập nhật tồn kho mới và đánh dấu đã kiểm kê tháng này
+                    await supabaseClient
+                        .from('parts')
+                        .update({ 
+                            stock_quantity: newQty,
+                            last_audit_month: currentMonthLabel 
+                        })
+                        .eq('part_code', item.part_code);
+                }
+            }
+
+            alert(`Đã chốt và lưu kết quả kiểm kê tháng ${currentMonthLabel} thành công!`);
+            fetchInventory();
+            switchTab('nhatky'); // Tự động chuyển sang tab Nhật Ký để thấy ngay lịch sử vừa kiểm kê
+        }
+
+        // --- NHẬT KÝ ---
+        async function fetchLogs() {
+            const tbody = document.getElementById('logsTableBody');
+            const { data, error } = await supabaseClient.from('transactions').select('*').order('id', { ascending: false }).limit(50);
+            
+            if (error || !data || data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">Chưa có nhật ký giao dịch nào.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            data.forEach(log => {
+                const dateStr = new Date(log.created_at).toLocaleString('vi-VN');
+                let badge = '';
+                if (log.note && log.note.includes('Kiểm kê')) {
+                    badge = `<span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">📋 Kiểm Kê Tháng</span>`;
+                } else if (log.trans_type === 'IN') {
+                    badge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">Nhập Kho</span>`;
+                } else {
+                    badge = `<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">Xuất Kho</span>`;
+                }
+
+                html += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 text-slate-500 text-xs">${dateStr}</td>
+                        <td class="p-3 font-semibold text-slate-900">${log.part_code}</td>
+                        <td class="p-3 text-slate-700">${log.part_name}</td>
+                        <td class="p-3">${badge}</td>
+                        <td class="p-3 font-bold ${log.trans_type === 'IN' ? 'text-emerald-600' : 'text-blue-600'}">${log.quantity > 0 ? (log.trans_type === 'IN' ? '+' : '-') + log.quantity : '0'}</td>
+                        <td class="p-3 text-slate-600 italic">${log.note || ''}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function openEditModal(partCode) {
+            const item = allPartsData.find(p => p.part_code === partCode);
+            if (!item) return;
+
+            document.getElementById('editOriginalCode').value = item.part_code;
+            document.getElementById('editPartCode').value = item.part_code;
+            document.getElementById('editPartName').value = item.part_name;
+            document.getElementById('editStock').value = item.stock_quantity;
+            document.getElementById('editLocation').value = item.location;
+            document.getElementById('editNote').value = item.note || '';
+            document.getElementById('editImage').value = item.image_url || '';
+
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        async function handleUpdatePart(e) {
+            e.preventDefault();
+            const originalCode = document.getElementById('editOriginalCode').value;
+            const updatedData = {
+                part_name: document.getElementById('editPartName').value.trim(),
+                stock_quantity: parseInt(document.getElementById('editStock').value),
+                location: document.getElementById('editLocation').value.trim(),
+                note: document.getElementById('editNote').value.trim(),
+                image_url: document.getElementById('editImage').value.trim()
+            };
+
+            const { error } = await supabaseClient.from('parts').update(updatedData).eq('part_code', originalCode);
+            if (error) {
+                alert('Lỗi cập nhật: ' + error.message);
+                return;
+            }
+
+            alert('Cập nhật linh kiện thành công!');
+            closeEditModal();
+            fetchInventory();
+        }
+
+        async function deletePart(partCode) {
+            if (!confirm(`Bạn có chắc chắn muốn xóa linh kiện mã [${partCode}] này không?`)) return;
+
+            const { error } = await supabaseClient.from('parts').delete().eq('part_code', partCode);
+            if (error) {
+                alert('Lỗi khi xóa: ' + error.message);
+                return;
+            }
+
+            alert('Đã xóa linh kiện thành công!');
+            fetchInventory();
+        }
+    </script>
+</body>
+</html>
